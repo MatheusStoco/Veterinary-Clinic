@@ -1,23 +1,23 @@
-import database.dao.AppointmentDao;
-import database.dao.ClientDao;
-import database.model.AppointmentEntity;
-import database.model.ClientEntity;
-import database.model.enums.Day;
 import javafx.application.Application;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.stage.Stage;
 
-import java.time.LocalDate;
-import java.time.LocalTime;
-
 public class Main extends Application {
+
+    @Override
     public void start(Stage stage) throws Exception {
         FXMLLoader fxmlLoader = new FXMLLoader(getClass().getResource("gui/main.fxml"));
-        Parent root = (Parent) fxmlLoader.load();
+        Parent root = fxmlLoader.load();
+
         Scene scene = new Scene(root);
+        stage.setTitle("Clínica Veterinária");
         stage.setScene(scene);
+
+        // Abre maximizado para funcionar em qualquer resolução
+        stage.setMaximized(true);
+
         stage.show();
     }
 
