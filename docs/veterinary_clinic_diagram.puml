@@ -1,0 +1,224 @@
+@startuml Clínica Veterinária
+
+skinparam backgroundColor    #EBF5FB
+skinparam defaultFontName    Segoe UI
+skinparam defaultFontSize    12
+
+skinparam class {
+    BackgroundColor          #D6EAF8
+    BorderColor              #154360
+    HeaderBackgroundColor    #1E5F8E
+    HeaderFontColor          #FFFFFF
+    HeaderFontStyle          Bold
+    FontColor                #0D2137
+    ArrowColor               #2E86C1
+    StereotypeFontColor      #5DADE2
+}
+
+skinparam interface {
+    BackgroundColor          #0B5394
+    BorderColor              #072B54
+    FontColor                #FFFFFF
+    HeaderFontColor          #FFFFFF
+}
+
+skinparam package {
+    BackgroundColor          #EBF5FB
+    BorderColor              #1E5F8E
+    FontColor                #1A3A5C
+    FontStyle                Bold
+    FontSize                 13
+}
+
+skinparam note {
+    BackgroundColor          #D6EAF8
+    BorderColor              #2E86C1
+    FontColor                #1A3A5C
+}
+
+' ─────────────────────────────────────────
+'  TELA / INTERFACE
+' ─────────────────────────────────────────
+package "Interface Gráfica (JavaFX)" {
+
+    class Main {
+        Ponto de entrada
+        Carrega main.fxml
+    }
+
+    class ControladorPrincipal <<MainController>> {
+        Formulário de agendamento
+        Valida campos obrigatórios
+        Salva cliente e consulta
+    }
+
+    class ControladorConfirmacao <<SubmittedController>> {
+        Tela de sucesso
+    }
+
+    class Calendario <<Calendar>> {
+        Verifica disponibilidade do médico
+        Calcula horários livres
+        Desconta consultas já marcadas
+    }
+
+}
+
+' ─────────────────────────────────────────
+'  ACESSO AO BANCO
+' ─────────────────────────────────────────
+package "Camada DAO" {
+
+    interface RepositorioBase {
+        buscar(id): T
+        buscarTodos(): List<T>
+        salvar(t): void
+    }
+
+    class RepositorioAnimal <<AnimalDao>> {
+        buscarTodasEspecies()
+    }
+
+    class RepositorioConsulta <<AppointmentDao>> {
+        buscarPorData(data)
+    }
+
+    class RepositorioCliente <<ClientDao>>
+    class RepositorioMedico <<MedicDao>>
+    class RepositorioHorario <<ScheduleDao>> {
+        buscarHorariosMedico(id)
+    }
+    class RepositorioProcedimento <<SurgeryDao>>
+
+}
+
+' ─────────────────────────────────────────
+'  MODELOS / ENTIDADES
+' ─────────────────────────────────────────
+package "Modelos (Entidades JPA)" {
+
+    class Animal {
+        id
+        especie
+        raca
+    }
+
+    class Consulta {
+        id
+        data
+        hora
+        observacoes
+        id_procedimento
+        id_medico
+        id_cliente
+        id_animal
+    }
+
+    class Cliente {
+        id
+        nome
+        sobrenome
+        cpf
+        telefone
+        email
+    }
+
+    class Medico {
+        id
+        usuario
+        senha
+        nome
+        sobrenome
+        email
+        telefone
+    }
+
+    class Horario {
+        id
+        hora_inicio
+        hora_fim
+        dia_semana
+        id_medico
+    }
+
+    class Procedimento {
+        id
+        nome
+        duracao
+        preco_minimo
+    }
+
+}
+
+' ─────────────────────────────────────────
+'  BANCO DE DADOS
+' ─────────────────────────────────────────
+package "Banco de Dados (PostgreSQL)" {
+
+    class BD <<database>> {
+        animal
+        consulta
+        cliente
+        medico
+        horario
+        procedimento
+    }
+
+}
+
+' ─────────────────────────────────────────
+'  NOTAS
+' ─────────────────────────────────────────
+note right of Calendario
+  Lógica principal de agendamento:
+  1. Filtra dias com o médico disponível
+  2. Remove horários já ocupados
+  3. Retorna os horários livres
+end note
+
+note bottom of BD
+  Conexão via JPA / EclipseLink
+  localhost:5432/veterinary_clinic
+end note
+
+' ─────────────────────────────────────────
+'  RELACIONAMENTOS
+' ─────────────────────────────────────────
+
+Main ..> ControladorPrincipal           : carrega via FXML
+
+ControladorPrincipal *-- Calendario     : usa
+ControladorPrincipal ..> ControladorConfirmacao : navega para
+
+ControladorPrincipal --> RepositorioAnimal
+ControladorPrincipal --> RepositorioMedico
+ControladorPrincipal --> RepositorioProcedimento
+ControladorPrincipal --> RepositorioCliente
+ControladorPrincipal --> RepositorioConsulta
+
+Calendario --> RepositorioHorario
+Calendario --> RepositorioConsulta
+Calendario --> RepositorioProcedimento
+
+RepositorioBase <|.. RepositorioAnimal
+RepositorioBase <|.. RepositorioConsulta
+RepositorioBase <|.. RepositorioCliente
+RepositorioBase <|.. RepositorioMedico
+RepositorioBase <|.. RepositorioHorario
+RepositorioBase <|.. RepositorioProcedimento
+
+RepositorioAnimal       ..> Animal
+RepositorioConsulta     ..> Consulta
+RepositorioCliente      ..> Cliente
+RepositorioMedico       ..> Medico
+RepositorioHorario      ..> Horario
+RepositorioProcedimento ..> Procedimento
+
+Animal       ..> BD
+Consulta     ..> BD
+Cliente      ..> BD
+Medico       ..> BD
+Horario      ..> BD
+Procedimento ..> BD
+
+@enduml

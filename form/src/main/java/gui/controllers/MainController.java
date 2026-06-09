@@ -1,8 +1,10 @@
 package gui.controllers;
 
-import database.dao.*;
-import database.model.*;
-import gui.model.Calendar;
+import database.exception.BusinessException;
+import database.exception.ClinicException;
+import database.model.AnimalEntity;
+import database.model.MedicEntity;
+import database.model.SurgeryEntity;
 import javafx.application.Platform;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
@@ -18,336 +20,228 @@ import javafx.scene.text.Text;
 import javafx.stage.Stage;
 import javafx.stage.Window;
 import javafx.util.Callback;
+import service.ClinicService;
 
 import java.io.IOException;
 import java.net.URL;
 import java.time.LocalDate;
 import java.time.LocalTime;
-import java.util.*;
+import java.util.List;
+import java.util.ResourceBundle;
 import java.util.stream.Collectors;
 
+/**
+ * RF-01: MainController tem uma única responsabilidade —
+ * receber eventos da UI e delegar à ClinicService.
+ */
 public class MainController implements Initializable {
-    /* FXML members */
-    @FXML
-    private ComboBox<String> speciesList = new ComboBox<>();
-    @FXML
-    private ComboBox<AnimalEntity> breedList = new ComboBox<>();
-    @FXML
-    private ComboBox<MedicEntity> medicList = new ComboBox<>();
-    @FXML
-    private ComboBox<SurgeryEntity> surgeryList = new ComboBox<>();
-    @FXML
-    private ComboBox<LocalTime> hourList = new ComboBox<>();
-    @FXML
-    private DatePicker datePicker = new DatePicker();
-    @FXML
-    private Text surgeryTime = new Text();
-    @FXML
-    private TextField firstName = new TextField();
-    @FXML
-    private TextField lastName = new TextField();
-    @FXML
-    private TextField tin = new TextField();
-    @FXML
-    private TextField phoneNumber = new TextField();
-    @FXML
-    private TextField email = new TextField();
-    @FXML
-    private TextArea notes = new TextArea();
 
-    @FXML
-    private Text firstNameWarning = new Text();
-    @FXML
-    private Text lastNameWarning = new Text();
-    @FXML
-    private Text tinWarning = new Text();
-    @FXML
-    private Text phoneNumberWarning = new Text();
-    @FXML
-    private Text emailWarning = new Text();
+    /* ── Campos do formulário ── */
+    @FXML private ComboBox<String>        speciesList;
+    @FXML private ComboBox<AnimalEntity>  breedList;
+    @FXML private ComboBox<MedicEntity>   medicList;
+    @FXML private ComboBox<SurgeryEntity> surgeryList;
+    @FXML private ComboBox<LocalTime>     hourList;
+    @FXML private DatePicker              datePicker;
+    @FXML private Text                    surgeryTime;
+    @FXML private TextField               firstName;
+    @FXML private TextField               lastName;
+    @FXML private TextField               tin;
+    @FXML private TextField               phoneNumber;
+    @FXML private TextField               email;
+    @FXML private TextArea                notes;
 
-    /* Dao members */
-    AnimalDao animalDao = new AnimalDao();
-    MedicDao medicDao = new MedicDao();
-    SurgeryDao surgeryDao = new SurgeryDao();
-    ClientDao clientDao = new ClientDao();
-    AppointmentDao appointmentDao = new AppointmentDao();
+    /* ── Avisos de validação ── */
+    @FXML private Text firstNameWarning;
+    @FXML private Text lastNameWarning;
+    @FXML private Text tinWarning;
+    @FXML private Text phoneNumberWarning;
+    @FXML private Text emailWarning;
 
-    final List<AnimalEntity> BREED_LIST = new ArrayList<>();
-    Calendar calendar = new Calendar();
+    /* ── RF-01: único ponto de acesso à camada de negócio ── */
+    private final ClinicService clinicService = new ClinicService();
+
+    private final List<AnimalEntity> allAnimals = new java.util.ArrayList<>();
 
     @Override
     public void initialize(URL url, ResourceBundle resourceBundle) {
-        List<String> allSpecies = animalDao.getAllSpecies();
-        List<AnimalEntity> allAnimals = animalDao.getAll();
+        List<String> especies = clinicService.buscarEspecies();
+        allAnimals.addAll(clinicService.buscarAnimais());
 
-        BREED_LIST.addAll(allAnimals);
-        speciesList.getItems().addAll(allSpecies);
-
+        speciesList.getItems().addAll(especies);
         breedList.getItems().addAll(allAnimals);
+        medicList.getItems().addAll(clinicService.buscarMedicos());
+        surgeryList.getItems().addAll(clinicService.buscarProcedimentos());
 
-        List<MedicEntity> allMedics = medicDao.getAll();
-        medicList.getItems().addAll(allMedics);
-
-        List<SurgeryEntity> allSurgeries = surgeryDao.getAll();
-        surgeryList.getItems().addAll(allSurgeries);
-
-        // Factory to create Cell of DatePicker
-        Callback<DatePicker, DateCell> dayCellFactory = this.getDayCellFactory();
-        datePicker.setDayCellFactory(dayCellFactory);
-
-    }
-
-    private Callback<DatePicker, DateCell> getDayCellFactory() {
-        final Callback<DatePicker, DateCell> dayCellFactory = new Callback<DatePicker, DateCell>() {
-            @Override
-            public DateCell call(final DatePicker datePicker) {
-                return new DateCell() {
-
-                    @Override
-                    public void updateItem(LocalDate item, boolean empty) {
-                        boolean isInSchendule = true;
-
-                        /* The days when the doctor works */
-                        /* Check if have a schedule in that day */
-                        isInSchendule = !calendar.isDayAvailable(item);
-
-                        /* The period in which you can make an appointment */
-                        boolean isOneMonthPeriod = item.isBefore(LocalDate.now())
-                                || item.isAfter(LocalDate.now().plusMonths(3L));
-
-                        if (isOneMonthPeriod || isInSchendule) {
-                            setDisable(true);
-                            setStyle("-fx-background-color: #ffc0cb;");
-                        }
-                    }
-                };
-            }
-        };
-        return dayCellFactory;
+        datePicker.setDayCellFactory(buildDayCellFactory());
     }
 
     @FXML
-    public void onMedicSelected(ActionEvent actionEvent) {
-        calendar.setMedic(medicList
-                .getSelectionModel()
-                .getSelectedItem());
-
+    public void onMedicSelected(ActionEvent event) {
+        MedicEntity medico     = medicList.getSelectionModel().getSelectedItem();
+        SurgeryEntity proc     = surgeryList.getSelectionModel().getSelectedItem();
+        if (medico != null && proc != null) {
+            clinicService.configurarAgenda(medico, proc);
+        }
         clearAppointmentDate();
     }
 
     @FXML
-    public void onDateSelect(ActionEvent actionEvent) {
-        if (datePicker.getValue() == null)
-            return;
+    public void onSelectSurgery(ActionEvent event) {
+        SurgeryEntity proc = surgeryList.getSelectionModel().getSelectedItem();
+        if (proc == null) return;
+
+        surgeryTime.setText("Tempo estimado: " + proc.getTime().getHour() + " hora(s)");
+
+        MedicEntity medico = medicList.getSelectionModel().getSelectedItem();
+        if (medico != null) {
+            clinicService.configurarAgenda(medico, proc);
+        }
+        clearAppointmentDate();
+    }
+
+    @FXML
+    public void onDateSelect(ActionEvent event) {
+        if (datePicker.getValue() == null) return;
 
         hourList.getItems().clear();
-        hourList.getItems().addAll(calendar.getFreeHours(datePicker.getValue()));
+        hourList.getItems().addAll(clinicService.buscarHorariosLivres(datePicker.getValue()));
     }
 
-    public void onSelectSurgery(ActionEvent actionEvent) {
-        surgeryTime.setText("Estimated time: "
-                + surgeryList.getSelectionModel().getSelectedItem().getTime().getHour()
-                + " hour/s");
+    @FXML
+    public void onSelectSpecies(ActionEvent event) {
+        Platform.runLater(() -> {
+            if (speciesList.getValue() == null) return;
 
-        calendar.setSurgery(surgeryList.getValue());
-        clearAppointmentDate();
+            List<AnimalEntity> filtrados = allAnimals.stream()
+                    .filter(a -> a.getSpecies().equals(speciesList.getValue()))
+                    .collect(Collectors.toList());
+
+            breedList.getItems().setAll(filtrados);
+        });
     }
 
-    public void clearAppointmentDate() {
+    @FXML
+    public void onSelectBreed(ActionEvent event) {
+        if (breedList.getValue() == null) return;
+        AnimalEntity selecionado = breedList.getValue();
+        speciesList.setValue(selecionado.getSpecies());
+        Platform.runLater(() -> breedList.setValue(selecionado));
+    }
+
+    @FXML
+    public void onSubmitClicked(MouseEvent event) {
+        markInvalidFields();
+        if (!areAllFieldsValid()) return;
+
+        try {
+            clinicService.agendarConsulta(
+                    firstName.getText(), lastName.getText(),
+                    tin.getText(), phoneNumber.getText(), email.getText(),
+                    breedList.getValue(), medicList.getValue(),
+                    surgeryList.getValue(), datePicker.getValue(),
+                    hourList.getValue(), notes.getText()
+            );
+
+            Window window = ((Node) event.getTarget()).getScene().getWindow();
+            loadSubmittedPage(window);
+
+        } catch (BusinessException e) {
+            showAlert(Alert.AlertType.WARNING, "Dados inválidos", e.getMessage());
+        } catch (ClinicException e) {
+            showAlert(Alert.AlertType.ERROR, "Erro ao salvar", "Não foi possível realizar o agendamento.\n" + e.getMessage());
+        } catch (IOException e) {
+            showAlert(Alert.AlertType.ERROR, "Erro de navegação", "Não foi possível carregar a tela de confirmação.");
+        }
+    }
+
+    // ── Helpers de UI ──────────────────────────────────────────
+
+    private void clearAppointmentDate() {
         datePicker.setValue(null);
         hourList.setValue(null);
         hourList.getItems().clear();
     }
 
-    public void onSelectSpecies(ActionEvent actionEvent) {
-        /* MEME THREADUURI VALURI */
-        Platform.runLater(() -> {
-                    if (speciesList.getValue() == null)
-                        return;
-
-                    breedList.getItems().clear();
-
-                    for (AnimalEntity animalEntity : BREED_LIST) {
-                        breedList.getItems().add(animalEntity);
-                    }
-
-                    List<AnimalEntity> collect = breedList.getItems()
-                            .stream()
-                            .filter(animalEntity -> animalEntity.getSpecies().equals(speciesList.getValue()))
-                            .collect(Collectors.toList());
-
-                    breedList.getItems().clear();
-                    breedList.getItems().addAll(collect);
-                }
-        );
-    }
-
-    public void onSelectBreed(ActionEvent actionEvent) {
-        if (breedList.getValue() == null)
-            return;
-        final AnimalEntity selectedSpecies = breedList.getValue();
-        speciesList.setValue(selectedSpecies.getSpecies());
-
-        Platform.runLater(() -> breedList.setValue(selectedSpecies));
-    }
-
-    public void onSubmitClicked(MouseEvent mouseEvent) {
-        markInvalidFields();
-
-        if (!areAllFieldsValid())
-            return;
-
-        ClientEntity clientEntity = new ClientEntity();
-
-        clientEntity.setFirstName(firstName.getText());
-        clientEntity.setLastName(lastName.getText());
-        clientEntity.setTin(tin.getText());
-        clientEntity.setPhoneNumber(phoneNumber.getText());
-        clientEntity.setEmail(email.getText());
-
-        clientDao.create(clientEntity);
-
-        AppointmentEntity appointmentEntity = new AppointmentEntity();
-        appointmentEntity.setDate(datePicker.getValue());
-        appointmentEntity.setHour(hourList.getValue());
-        appointmentEntity.setNotes(notes.getText());
-        appointmentEntity.setIdSurgery(surgeryList.getValue().getId());
-        appointmentEntity.setIdMedic(medicList.getValue().getId());
-        appointmentEntity.setIdClient(clientEntity.getId());
-        appointmentEntity.setIdAnimal(breedList.getValue().getId());
-
-        appointmentDao.create(appointmentEntity);
-
-        System.out.println(
-                firstName.getText() + " " + lastName.getText()
-        );
-
-        /* Call parent */
-        Window window = ((Node) mouseEvent.getTarget()).getScene().getWindow();
-        try {
-            loadSubmittedPage(window);
-        } catch (IOException exception) {
-            exception.printStackTrace();
-        }
-    }
-
     private void loadSubmittedPage(Window window) throws IOException {
-        FXMLLoader fxmlLoader = new FXMLLoader(MainController.class.getResource("/gui/submitted.fxml"));
-        Parent submitted = (Parent) fxmlLoader.load();
+        FXMLLoader loader = new FXMLLoader(MainController.class.getResource("/gui/submitted.fxml"));
+        Parent submitted  = loader.load();
 
-        /* get the dimension and position of previous window */
-        double height = window.getHeight();
-        double width = window.getWidth();
-        double x = window.getX();
-        double y = window.getY();
-        boolean isFullscreen = ((Stage) window).isFullScreen();
+        double height      = window.getHeight();
+        double width       = window.getWidth();
+        double x           = window.getX();
+        double y           = window.getY();
+        boolean fullscreen = ((Stage) window).isFullScreen();
 
-        Scene scene = new Scene(submitted);
-        Stage appStage = (Stage) window;
-        appStage.setScene(scene);
+        Stage stage = (Stage) window;
+        stage.setScene(new Scene(submitted));
+        stage.setHeight(height);
+        stage.setWidth(width);
+        stage.setX(x);
+        stage.setY(y);
+        stage.setFullScreen(fullscreen);
+        stage.show();
+    }
 
-        appStage.setHeight(height);
-        appStage.setWidth(width);
-        appStage.setX(x);
-        appStage.setY(y);
-        appStage.setFullScreen(isFullscreen);
+    private Callback<DatePicker, DateCell> buildDayCellFactory() {
+        return dp -> new DateCell() {
+            @Override
+            public void updateItem(LocalDate item, boolean empty) {
+                super.updateItem(item, empty);
 
-        appStage.show();
+                boolean foraPeriodo = item.isBefore(LocalDate.now())
+                        || item.isAfter(LocalDate.now().plusMonths(3));
+                boolean semDisponibilidade = !clinicService.verificarDisponibilidade(item);
+
+                if (foraPeriodo || semDisponibilidade) {
+                    setDisable(true);
+                    setStyle("-fx-background-color: #ffc0cb;");
+                }
+            }
+        };
     }
 
     private boolean areAllFieldsValid() {
-        if (firstName.getText().isEmpty())
-            return false;
-
-        if (lastName.getText().isEmpty())
-            return false;
-
-        if (tin.getText().isEmpty())
-            return false;
-
-        if (phoneNumber.getText().isEmpty())
-            return false;
-
-        if (email.getText().isEmpty())
-            return false;
-
-        if (speciesList.getValue() == null)
-            return false;
-
-        if (breedList.getValue() == null)
-            return false;
-
-        if (medicList.getValue() == null)
-            return false;
-
-        if (surgeryList.getValue() == null)
-            return false;
-
-        if (datePicker.getValue() == null)
-            return false;
-
-        if (hourList.getValue() == null)
-            return false;
-
-        return true;
+        return !firstName.getText().isEmpty()
+                && !lastName.getText().isEmpty()
+                && !tin.getText().isEmpty()
+                && !phoneNumber.getText().isEmpty()
+                && !email.getText().isEmpty()
+                && speciesList.getValue() != null
+                && breedList.getValue() != null
+                && medicList.getValue() != null
+                && surgeryList.getValue() != null
+                && datePicker.getValue() != null
+                && hourList.getValue() != null;
     }
 
     private void markInvalidFields() {
-        if (firstName.getText().isEmpty())
-            firstNameWarning.setVisible(true);
+        firstNameWarning.setVisible(firstName.getText().isEmpty());
+        lastNameWarning.setVisible(lastName.getText().isEmpty());
+        tinWarning.setVisible(tin.getText().isEmpty());
+        phoneNumberWarning.setVisible(phoneNumber.getText().isEmpty());
+        emailWarning.setVisible(email.getText().isEmpty());
 
-        if (lastName.getText().isEmpty())
-            lastNameWarning.setVisible(true);
-
-        if (tin.getText().isEmpty())
-            tinWarning.setVisible(true);
-
-        if (phoneNumber.getText().isEmpty())
-            phoneNumberWarning.setVisible(true);
-
-        if (email.getText().isEmpty())
-            emailWarning.setVisible(true);
-
-        if (speciesList.getValue() == null)
-            speciesList.setPromptText("* Required");
-
-        if (breedList.getValue() == null)
-            breedList.setPromptText("* Required");
-
-
-        if (medicList.getValue() == null)
-            medicList.setPromptText("* Required");
-
-
-        if (surgeryList.getValue() == null)
-            surgeryList.setPromptText("* Required");
-
-
-        if (datePicker.getValue() == null)
-            datePicker.setPromptText("* Required");
-
-        if (hourList.getValue() == null)
-            hourList.setPromptText("* Required");
+        if (speciesList.getValue() == null)  speciesList.setPromptText("* Obrigatório");
+        if (breedList.getValue() == null)    breedList.setPromptText("* Obrigatório");
+        if (medicList.getValue() == null)    medicList.setPromptText("* Obrigatório");
+        if (surgeryList.getValue() == null)  surgeryList.setPromptText("* Obrigatório");
+        if (datePicker.getValue() == null)   datePicker.setPromptText("* Obrigatório");
+        if (hourList.getValue() == null)     hourList.setPromptText("* Obrigatório");
     }
 
-    public void onFirstNameKeyPressed(KeyEvent keyEvent) {
-        firstNameWarning.setVisible(false);
+    private void showAlert(Alert.AlertType type, String title, String message) {
+        Alert alert = new Alert(type);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
+        alert.setContentText(message);
+        alert.showAndWait();
     }
 
-    public void onLastNameKeyPressed(KeyEvent keyEvent) {
-        lastNameWarning.setVisible(false);
-    }
-
-    public void onTinKeyPressed(KeyEvent keyEvent) {
-        tinWarning.setVisible(false);
-    }
-
-    public void onPhoneNumberKeyPressed(KeyEvent keyEvent) {
-        phoneNumberWarning.setVisible(false);
-    }
-
-    public void onEmailKeyPressed(KeyEvent keyEvent) {
-        emailWarning.setVisible(false);
-    }
+    /* ── Limpa avisos ao digitar ── */
+    @FXML public void onFirstNameKeyPressed(KeyEvent e)   { firstNameWarning.setVisible(false); }
+    @FXML public void onLastNameKeyPressed(KeyEvent e)    { lastNameWarning.setVisible(false); }
+    @FXML public void onTinKeyPressed(KeyEvent e)         { tinWarning.setVisible(false); }
+    @FXML public void onPhoneNumberKeyPressed(KeyEvent e) { phoneNumberWarning.setVisible(false); }
+    @FXML public void onEmailKeyPressed(KeyEvent e)       { emailWarning.setVisible(false); }
 }

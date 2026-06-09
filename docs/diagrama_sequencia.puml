@@ -1,0 +1,118 @@
+@startuml Diagrama de Sequência - Agendamento de Consulta (aoEnviarFormulario)
+
+skinparam backgroundColor  #FFFFFF
+skinparam defaultFontName  Arial
+skinparam defaultFontSize  11
+skinparam sequenceArrowThickness 1
+skinparam sequenceGroupBorderColor #3333AA
+skinparam sequenceGroupBackgroundColor #EEEEFF
+skinparam sequenceGroupFontColor #000000
+skinparam sequenceGroupFontStyle Bold
+
+skinparam participant {
+    BackgroundColor #F0F0F0
+    BorderColor     #555555
+    FontColor       #000000
+    FontStyle       Bold
+}
+
+skinparam actor {
+    BackgroundColor #FFD580
+    BorderColor     #AA8800
+    FontColor       #000000
+}
+
+skinparam sequence {
+    LifeLineBorderColor       #888888
+    LifeLineBackgroundColor   #FFFF99
+    ArrowColor                #333333
+    DividerBackgroundColor    #CCCCFF
+    DividerFontColor          #000000
+}
+
+actor       "Usuário"             as Usuario
+participant "MainController"      as MC      #FF8C69
+participant "ClienteDao"          as CD      #FFD700
+participant "ConsultaDao"         as AD      #FFA500
+participant "DatabaseConnection"  as DB      #FF6347
+participant "Calendar"            as CAL     #BA55D3
+participant "MySQL"               as SQL     #708090
+
+== Fluxo Principal: Envio do Formulário ==
+
+Usuario -> MC : 1: aoEnviarFormulario()
+activate MC
+
+MC -> MC : 2: marcarCamposInvalidos() / todosCamposValidos()
+
+MC -> MC : 3: new ClienteEntity() + setters
+
+MC -> CD : 4: clienteDao.criar(clienteEntity)
+activate CD
+
+CD -> DB : 5: executarTransacao(persist)
+activate DB
+
+DB -> SQL : 6: INSERT INTO cliente
+SQL --> DB : 7: id gerado
+
+DB --> CD : 8: retorno
+deactivate DB
+
+CD --> MC : 9: retorno
+deactivate CD
+
+MC -> MC : 10: new ConsultaEntity() + setters
+
+MC -> AD : 11: consultaDao.criar(consultaEntity)
+activate AD
+
+AD -> DB : 12: executarTransacao(persist)
+activate DB
+
+DB -> SQL : 13: INSERT INTO consulta
+SQL --> DB : 14: OK
+
+DB --> AD : 15: retorno
+deactivate DB
+
+AD --> MC : 16: retorno
+deactivate AD
+
+MC -> MC : 17: carregarTelaConfirmacao(janela)
+MC -> MC : 18: FXMLLoader.load(confirmacao.fxml)
+MC -> MC : 19: stage.setScene().show()
+
+note left of MC
+  Tela de confirmação
+  exibida ao usuário
+end note
+
+deactivate MC
+
+== Inicialização do Formulário ==
+
+group initialize()
+
+    MC -> MC : a: animalDao.buscarTodasEspecies()
+    MC -> SQL : SELECT especie FROM animal
+    SQL --> MC : List<String>
+
+    MC -> MC : b: medicoDao.buscarTodos()
+    MC -> SQL : SELECT m FROM MedicoEntity
+    SQL --> MC : List<MedicoEntity>
+
+    MC -> MC : c: procedimentoDao.buscarTodos()
+    MC -> SQL : SELECT s FROM ProcedimentoEntity
+    SQL --> MC : List<ProcedimentoEntity>
+
+end
+
+legend bottom left
+  <b>Legenda</b>
+  ->    Chamada síncrona
+  -->   Retorno / interno
+  <color:yellow>▬▬</color>  Ativação do objeto
+endlegend
+
+@enduml
