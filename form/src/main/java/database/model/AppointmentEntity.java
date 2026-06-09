@@ -7,106 +7,66 @@ import java.time.LocalTime;
 @Entity
 @Table(name = "appointment", schema = "public", catalog = "veterinary_clinic")
 public class AppointmentEntity {
+
     @Id
     @Column(name = "id", nullable = false)
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private long id;
+
     @Basic
     @Column(name = "date", nullable = false)
     private LocalDate date;
+
     @Basic
     @Column(name = "hour", nullable = false)
     private LocalTime hour;
+
     @Basic
-    @Column(name = "notes", nullable = false, length = -1)
+    @Column(name = "notes", length = -1)
     private String notes;
-    @Basic
-    @Column(name = "id_surgery", nullable = false)
-    private long idSurgery;
-    @Basic
-    @Column(name = "id_medic", nullable = false)
-    private long idMedic;
-    @Basic
-    @Column(name = "id_client", nullable = false)
-    private long idClient;
-    @Basic
-    @Column(name = "id_animal", nullable = false)
-    private long idAnimal;
 
-    public long getId() {
-        return id;
-    }
+    @ManyToOne
+    @JoinColumn(name = "id_surgery", nullable = false)
+    private SurgeryEntity surgery;
 
-    public void setId(long id) {
-        this.id = id;
-    }
+    @ManyToOne
+    @JoinColumn(name = "id_medic", nullable = false)
+    private MedicEntity medic;
 
-    public LocalDate getDate() {
-        return date;
-    }
+    @ManyToOne
+    @JoinColumn(name = "id_client", nullable = false)
+    private ClientEntity client;
 
-    public void setDate(LocalDate date) {
-        this.date = date;
-    }
+    @ManyToOne
+    @JoinColumn(name = "id_animal", nullable = false)
+    private AnimalEntity animal;
 
-    public LocalTime getHour() {
-        return hour;
-    }
+    public long getId() { return id; }
+    public void setId(long id) { this.id = id; }
 
-    public void setHour(LocalTime hour) {
-        this.hour = hour;
-    }
+    public LocalDate getDate() { return date; }
+    public void setDate(LocalDate date) { this.date = date; }
 
-    public String getNotes() {
-        return notes;
-    }
+    public LocalTime getHour() { return hour; }
+    public void setHour(LocalTime hour) { this.hour = hour; }
 
-    public void setNotes(String notes) {
-        this.notes = notes;
-    }
+    public String getNotes() { return notes; }
+    public void setNotes(String notes) { this.notes = notes; }
 
-    public long getIdSurgery() {
-        return idSurgery;
-    }
+    public SurgeryEntity getSurgery() { return surgery; }
+    public void setSurgery(SurgeryEntity surgery) { this.surgery = surgery; }
 
-    public void setIdSurgery(long idSurgery) {
-        this.idSurgery = idSurgery;
-    }
+    public MedicEntity getMedic() { return medic; }
+    public void setMedic(MedicEntity medic) { this.medic = medic; }
 
-    public long getIdMedic() {
-        return idMedic;
-    }
+    public ClientEntity getClient() { return client; }
+    public void setClient(ClientEntity client) { this.client = client; }
 
-    public void setIdMedic(long idMedic) {
-        this.idMedic = idMedic;
-    }
-
-    public long getIdClient() {
-        return idClient;
-    }
-
-    public void setIdClient(long idClient) {
-        this.idClient = idClient;
-    }
-
-    public long getIdAnimal() {
-        return idAnimal;
-    }
-
-    public void setIdAnimal(long idAnimal) {
-        this.idAnimal = idAnimal;
-    }
+    public AnimalEntity getAnimal() { return animal; }
+    public void setAnimal(AnimalEntity animal) { this.animal = animal; }
 
     @Override
     public String toString() {
-        return "AppointmentEntity{" +
-                "date=" + date +
-                ", hour=" + hour +
-                ", notes='" + notes + '\'' +
-                ", idSurgery=" + idSurgery +
-                ", idMedic=" + idMedic +
-                ", idClient=" + idClient +
-                ", idAnimal=" + idAnimal +
-                '}';
+        return "AppointmentEntity{date=" + date + ", hour=" + hour + ", notes='" + notes + "'}";
     }
 }

@@ -2,7 +2,6 @@ package gui.model;
 
 import database.dao.AppointmentDao;
 import database.dao.ScheduleDao;
-import database.dao.SurgeryDao;
 import database.model.AppointmentEntity;
 import database.model.MedicEntity;
 import database.model.ScheduleEntity;
@@ -16,9 +15,9 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 public class Calendar {
-    private ScheduleDao scheduleDao;
-    private AppointmentDao appointmentDao;
-    private SurgeryDao surgeryDao;
+
+    private final ScheduleDao scheduleDao;
+    private final AppointmentDao appointmentDao;
 
     private MedicEntity medic = new MedicEntity();
     private List<ScheduleEntity> medicSchedules = new ArrayList<>();
@@ -26,21 +25,13 @@ public class Calendar {
     private Long surgeryTime;
 
     public Calendar() {
-        scheduleDao = new ScheduleDao();
-        appointmentDao = new AppointmentDao();
-        surgeryDao = new SurgeryDao();
-    }
-
-    public Calendar(MedicEntity medic, SurgeryEntity surgery) {
-        /* Call default constructor */
-        this();
-        this.setMedic(medic);
-        this.setSurgery(surgery);
+        this.scheduleDao = new ScheduleDao();
+        this.appointmentDao = new AppointmentDao();
     }
 
     public void setMedic(MedicEntity medic) {
         this.medic = medic;
-        setMedicSchedules();
+        this.medicSchedules = scheduleDao.getMedicSchedules(medic.getId());
     }
 
     public void setSurgery(SurgeryEntity surgery) {
@@ -48,111 +39,78 @@ public class Calendar {
         this.surgeryTime = surgery.getTime().getLong(ChronoField.HOUR_OF_DAY);
     }
 
-    private void setMedicSchedules() {
-        medicSchedules = scheduleDao.getMedicSchedules(medic.getId());
-    }
+    public boolean isDayAvailable(LocalDate date) {
+        if (surgeryTime == null) return false;
 
-    public boolean isDayAvailable(LocalDate item) {
-        /* Must select a surgery time */
-        if (surgeryTime == null)
-            return false;
+        List<ScheduleEntity> schedulesForDay = getSchedulesByDay(date);
+        if (schedulesForDay.isEmpty()) return false;
 
-        List<ScheduleEntity> medicSchedulesCurrentDay = getSchedulesByDay(item);
+        subtractAppointmentsFromSchedules(schedulesForDay, date);
 
-        if (medicSchedulesCurrentDay.isEmpty())
-            return false;
-
-        /* Subtract appointments from schedule  */
-        subtractAppointmentsFromSchedules(medicSchedulesCurrentDay, item);
-
-        /* Check if surgery time fits */
-        for (ScheduleEntity medicSchedule : medicSchedulesCurrentDay) {
-            LocalTime minimumHour = medicSchedule.getEndHour().minusHours(surgeryTime);
-            if (medicSchedule.getStartHour().equals(minimumHour) || medicSchedule.getStartHour().isBefore(minimumHour))
-                return true;
+        for (ScheduleEntity schedule : schedulesForDay) {
+            LocalTime minimumHour = schedule.getEndHour().minusHours(surgeryTime);
+            if (!schedule.getStartHour().isAfter(minimumHour)) return true;
         }
         return false;
     }
 
-    public List<LocalTime> getFreeHours(LocalDate item) {
-        List<ScheduleEntity> medicSchedulesCurrentDay = getSchedulesByDay(item);
-
-        /* Subtract appointments from schedule  */
-        subtractAppointmentsFromSchedules(medicSchedulesCurrentDay, item);
+    public List<LocalTime> getFreeHours(LocalDate date) {
+        List<ScheduleEntity> schedulesForDay = getSchedulesByDay(date);
+        subtractAppointmentsFromSchedules(schedulesForDay, date);
 
         List<LocalTime> freeHours = new ArrayList<>();
-
-        /* Check if surgery time fits */
-        for (ScheduleEntity medicSchedule : medicSchedulesCurrentDay) {
-            LocalTime minimumHour = medicSchedule.getEndHour().minusHours(surgeryTime);
-            if (medicSchedule.getStartHour().equals(minimumHour) || medicSchedule.getStartHour().isBefore(minimumHour)) {
-                for (LocalTime hour = medicSchedule.getStartHour();
-                     !hour.equals(medicSchedule.getEndHour()) && hour.isBefore(medicSchedule.getEndHour());
+        for (ScheduleEntity schedule : schedulesForDay) {
+            LocalTime minimumHour = schedule.getEndHour().minusHours(surgeryTime);
+            if (!schedule.getStartHour().isAfter(minimumHour)) {
+                for (LocalTime hour = schedule.getStartHour();
+                     !hour.isAfter(minimumHour);
                      hour = hour.plusHours(surgeryTime)) {
                     freeHours.add(hour);
                 }
             }
         }
-
         return freeHours;
     }
 
     public List<ScheduleEntity> getSchedulesByDay(LocalDate date) {
-        List<ScheduleEntity> medicSchedulesCurrentDay = new ArrayList<>();
-
-        /* Deep copy of the list */
-        for (ScheduleEntity medicSchedule : medicSchedules) {
-            ScheduleEntity copy = new ScheduleEntity();
-            copy.setStartHour(medicSchedule.getStartHour());
-            copy.setEndHour(medicSchedule.getEndHour());
-            copy.setDay(medicSchedule.getDay());
-            medicSchedulesCurrentDay.add(copy);
-        }
-
-        /* Get only schedule entities that are in the same day as the parameter (date) */
-        medicSchedulesCurrentDay = medicSchedulesCurrentDay
-                .stream()
-                .filter(scheduleEntity -> scheduleEntity.getDay().toString().equals(date.getDayOfWeek().toString()))
+        return medicSchedules.stream()
+                .map(s -> {
+                    ScheduleEntity copy = new ScheduleEntity();
+                    copy.setStartHour(s.getStartHour());
+                    copy.setEndHour(s.getEndHour());
+                    copy.setDay(s.getDay());
+                    return copy;
+                })
+                .filter(s -> s.getDay().toString().equals(date.getDayOfWeek().toString()))
                 .collect(Collectors.toList());
-
-        return medicSchedulesCurrentDay;
     }
 
-    public void subtractAppointmentsFromSchedules(List<ScheduleEntity> medicSchedulesCurrentDay, LocalDate item) {
-        /* All appointments for current day */
-        List<AppointmentEntity> appointmentEntities = appointmentDao.getByDate(item);
+    public void subtractAppointmentsFromSchedules(List<ScheduleEntity> schedulesForDay, LocalDate date) {
+        List<AppointmentEntity> appointments = appointmentDao.getByDate(date);
 
-        for (AppointmentEntity appointmentEntity : appointmentEntities) {
-            LocalTime appointmentHour = appointmentEntity.getHour();
+        for (AppointmentEntity appointment : appointments) {
+            // RF-05: acessa duração via associação JPA (sem surgeryDao separado)
+            Long duration = appointment.getSurgery().getTime().getLong(ChronoField.HOUR_OF_DAY);
+            LocalTime appointmentHour = appointment.getHour();
 
-            Long currentSurgeryTime = surgeryDao
-                    .get(appointmentEntity.getIdSurgery()).getTime().getLong(ChronoField.HOUR_OF_DAY);
+            for (int i = 0; i < schedulesForDay.size(); i++) {
+                LocalTime start = schedulesForDay.get(i).getStartHour();
+                LocalTime end = schedulesForDay.get(i).getEndHour();
 
-            for (int i = 0; i < medicSchedulesCurrentDay.size(); i++) {
-                LocalTime scheduleStartHour = medicSchedulesCurrentDay.get(i).getStartHour();
-                LocalTime scheduleEndHour = medicSchedulesCurrentDay.get(i).getEndHour();
-
-                boolean isLeftEdge = appointmentHour.equals(scheduleStartHour);
-                boolean isRightEdge = appointmentHour.equals(scheduleEndHour);
-                boolean isInside = (appointmentHour.isAfter(scheduleStartHour) && appointmentHour.isBefore(scheduleEndHour));
-
-                if (isLeftEdge) {
-                    medicSchedulesCurrentDay.get(i).setStartHour(appointmentHour.plusHours(currentSurgeryTime));
-                } else if (isInside) {
-                    /* CODE TO SPLIT */
+                if (appointmentHour.equals(start)) {
+                    schedulesForDay.get(i).setStartHour(appointmentHour.plusHours(duration));
+                } else if (appointmentHour.isAfter(start) && appointmentHour.isBefore(end)) {
                     ScheduleEntity left = new ScheduleEntity();
-                    ScheduleEntity right = new ScheduleEntity();
-
-                    left.setStartHour(scheduleStartHour);
+                    left.setStartHour(start);
                     left.setEndHour(appointmentHour);
 
-                    right.setStartHour(appointmentHour.plusHours(currentSurgeryTime));
-                    right.setEndHour(scheduleEndHour);
+                    ScheduleEntity right = new ScheduleEntity();
+                    right.setStartHour(appointmentHour.plusHours(duration));
+                    right.setEndHour(end);
 
-                    medicSchedulesCurrentDay.remove(medicSchedulesCurrentDay.get(i));
-
-                    medicSchedulesCurrentDay.add(left);
-                    medicSchedulesCurrentDay.add(right);
+                    schedulesForDay.remove(i);
+                    schedulesForDay.add(left);
+                    schedulesForDay.add(right);
                 }
             }
         }

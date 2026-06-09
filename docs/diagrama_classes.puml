@@ -1,0 +1,198 @@
+@startuml Diagrama de Classes - Veterinary-Clinic
+
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Arial
+skinparam defaultFontSize 11
+skinparam classAttributeIconSize 0
+
+skinparam class {
+    BorderColor        #555555
+    ArrowColor         #333333
+    FontColor          #000000
+}
+
+' ── Interface ──────────────────────────────────────────
+interface "<<interface>>\nDaoI<T>" as DaoI #CDDEFF {
+    + buscar(id: Long): T
+    + buscarTodos(): List<T>
+    + criar(t: T): void
+}
+
+' ── Infraestrutura ─────────────────────────────────────
+class DatabaseConnection #FFD580 {
+    - fabricaEntityManager
+    - entityManager
+    --
+    + getEntityManager()
+    + executarTransacao()
+}
+
+class Calendar #D7BDE2 {
+    - horarioDao: HorarioDao
+    - consultaDao: ConsultaDao
+    - procedimentoDao: ProcedimentoDao
+    - medico: MedicoEntity
+    - procedimento: ProcedimentoEntity
+    --
+    + diaDisponivel(data): bool
+    + horariosLivres()
+    + buscarHorariosPorDia()
+    + subtrairConsultas()
+}
+
+' ── DAOs ───────────────────────────────────────────────
+class AnimalDao #ABEBC6 {
+    - conexao: DBConn
+    --
+    + buscar()
+    + buscarTodos()
+    + buscarPorEspecie()
+    + criar()
+}
+
+class ConsultaDao #ABEBC6 {
+    - conexao: DBConn
+    --
+    + buscar()
+    + buscarTodos()
+    + buscarPorData()
+    + criar()
+}
+
+class ClienteDao #ABEBC6 {
+    - conexao: DBConn
+    --
+    + buscar()
+    + buscarTodos()
+    + criar()
+}
+
+class MedicoDao #ABEBC6 {
+    - conexao: DBConn
+    --
+    + buscar()
+    + buscarTodos()
+    + criar()
+}
+
+class HorarioDao #ABEBC6 {
+    - conexao: DBConn
+    --
+    + buscar()
+    + buscarTodos()
+    + buscarHorariosMedico()
+    + criar()
+}
+
+class ProcedimentoDao #ABEBC6 {
+    - conexao: DBConn
+    --
+    + buscar()
+    + buscarTodos()
+    + criar()
+}
+
+' ── Entidades ──────────────────────────────────────────
+class AnimalEntity #F1948A {
+    - id: long
+    - raca: String
+    - especie: String
+    --
+    + getters/setters
+}
+
+class ConsultaEntity #F1948A {
+    - id: long
+    - data: LocalDate
+    - hora: LocalTime
+    - observacoes: String
+    - idProcedimento/Medico/Cliente/Animal: long
+    --
+    + getters/setters
+}
+
+class ClienteEntity #F1948A {
+    - id: long
+    - nome: String
+    - sobrenome: String
+    - cpf: String
+    - telefone: String
+    - email: String
+    --
+    + getters/setters
+}
+
+class MedicoEntity #F1948A {
+    - id: long
+    - usuario: String
+    - senha: String
+    - nome/sobrenome: String
+    - email/telefone: String
+    --
+    + getters/setters
+}
+
+class HorarioEntity #F1948A {
+    - id: long
+    - horaInicio: LocalTime
+    - horaFim: LocalTime
+    - diaSemana: DayOfWeek
+    - idMedico: long
+    --
+    + getters/setters
+}
+
+class ProcedimentoEntity #F1948A {
+    - id: long
+    - nome: String
+    - duracao: LocalTime
+    - precoMinimo: BigDecimal
+    --
+    + getters/setters
+}
+
+' ── Controller ─────────────────────────────────────────
+class MainController #F0B27A {
+    - animalDao, medicoDao, procedimentoDao
+    - clienteDao, consultaDao
+    - calendario: Calendar
+    --
+    + inicializar()
+    + aoEnviarFormulario()
+    + aoSelecionarMedico()
+    + aoSelecionarData()
+}
+
+' ── Relacionamentos ────────────────────────────────────
+
+DaoI <|.. AnimalDao
+DaoI <|.. ConsultaDao
+DaoI <|.. ClienteDao
+DaoI <|.. MedicoDao
+DaoI <|.. HorarioDao
+DaoI <|.. ProcedimentoDao
+
+DatabaseConnection <.. AnimalDao
+DatabaseConnection <.. ConsultaDao
+DatabaseConnection <.. ClienteDao
+DatabaseConnection <.. MedicoDao
+DatabaseConnection <.. HorarioDao
+DatabaseConnection <.. ProcedimentoDao
+
+Calendar <.. DatabaseConnection
+
+AnimalDao      ..> AnimalEntity
+ConsultaDao    ..> ConsultaEntity
+ClienteDao     ..> ClienteEntity
+MedicoDao      ..> MedicoEntity
+HorarioDao     ..> HorarioEntity
+ProcedimentoDao ..> ProcedimentoEntity
+
+MainController --> AnimalDao
+MainController --> ConsultaDao
+MainController --> ClienteDao
+MainController --> MedicoDao
+MainController --> ProcedimentoDao
+MainController *-- Calendar
+
+@enduml
